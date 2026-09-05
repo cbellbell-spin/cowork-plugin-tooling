@@ -30,9 +30,11 @@ rm -f "$ZIP"
 
 # -x patterns keep the archive clean; symlinks are dereferenced (-y omitted on
 # purpose) because Cowork rejects archives containing them.
+# .tooling/* is where CI checks out cowork-plugin-tooling itself — it must not
+# end up inside the plugin archive.
 zip -rq "$ZIP" . \
   -x '.git/*' '.github/*' 'node_modules/*' '*.zip' '*.plugin' \
-     '.DS_Store' '*/.DS_Store' '.env*' '.vercel/*'
+     '.DS_Store' '*/.DS_Store' '.env*' '.vercel/*' '.tooling/*'
 
 SIZE_MB=$(( $(wc -c < "$ZIP") / 1048576 ))
 echo "Built $ZIP (${SIZE_MB} MB)"
