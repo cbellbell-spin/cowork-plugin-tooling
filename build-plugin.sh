@@ -26,6 +26,19 @@ find . -type f \( -name '*.md' -o -name '*.json' \) \
   -not -path './.git/*' -not -path './node_modules/*' \
   -exec perl -pi -e 's/\r$//' {} +
 
+# zip dereferences symlinks (-y omitted on purpose), which means a DANGLING
+# symlink is silently skipped and the archive is built without it — exit 0, no
+# warning. That is exactly what happens in CI, where absolute dev symlinks into
+# ~/projects/shared/ do not resolve. Fail loudly instead.
+dangling=$(find . -type l ! -path './.git/*' ! -path './node_modules/*' \
+  -exec test ! -e {} \; -print 2>/dev/null)
+if [ -n "$dangling" ]; then
+  echo "ERROR: dangling symlinks — these would be silently omitted from the zip:" >&2
+  echo "$dangling" >&2
+  echo "Run sync-shared-refs.sh first, or fix the link targets." >&2
+  exit 1
+fi
+
 rm -f "$ZIP"
 
 # -x patterns keep the archive clean; symlinks are dereferenced (-y omitted on

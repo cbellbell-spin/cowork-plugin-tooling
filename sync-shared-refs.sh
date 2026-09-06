@@ -9,13 +9,25 @@
 # no use for a PM operating manual, and shipping it wastes 30 KB of the upload
 # budget and confuses the model about scope.
 #
+# WARNING: this REPLACES symlinks with regular files in the target repos. Plugin
+# repos keep symlinks into shared/ for local development, so running this against
+# a working clone dirties it (git shows a typechange). Run it against disposable
+# checkouts only — CI, or a build copy — not against ~/projects/<plugin>.
+#
+# build-plugin.sh does not need this locally: zip dereferences symlinks on its own.
+# It is needed in CI, where the absolute dev symlinks do not resolve.
+#
 # Idempotent. Safe to run repeatedly.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECTS_ROOT="$(dirname "$SCRIPT_DIR")"
-SHARED_DIR="$PROJECTS_ROOT/shared"
+PROJECTS_ROOT="${1:-$(dirname "$SCRIPT_DIR")}"
+
+# shared/ lives inside this repo so CI can reach it. Locally ~/projects/shared is
+# a symlink here, which keeps the plugins' absolute dev symlinks resolving.
+SHARED_DIR="$SCRIPT_DIR/shared"
+[ -d "$SHARED_DIR" ] || SHARED_DIR="$PROJECTS_ROOT/shared"
 
 if [ ! -d "$SHARED_DIR" ]; then
   echo "Error: canonical source not found at $SHARED_DIR" >&2
