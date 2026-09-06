@@ -49,7 +49,10 @@ fi
 # The PM docs go only to the PM coaching plugins.
 MAPPINGS=(
   "coach-cadence:WORKSPACE.md"
-  "kate-career-coach:WORKSPACE.md"
+  # NOT kate-career-coach. It is publicly distributed with its own download page,
+  # and WORKSPACE.md carries personal Drive folder ids that are useless to anyone
+  # else and should not ship. Kate resolves the user's own project folder instead
+  # — that design is already portable and must stay that way.
   "sdlc-system:WORKSPACE.md"
   "product-dev-coach:WORKSPACE.md"
   "product-ic-coach:WORKSPACE.md,pm-operating-manual.md,working-with-me.md"

@@ -45,9 +45,23 @@ rm -f "$ZIP"
 # purpose) because Cowork rejects archives containing them.
 # .tooling/* is where CI checks out cowork-plugin-tooling itself — it must not
 # end up inside the plugin archive.
+# A repo may declare extra exclusions in .plugin-ignore (one glob per line,
+# '#' comments allowed). Needed where a plugin repo also holds deploy code that
+# end users must not receive — kate-career-coach ships from the same repo as its
+# Vercel functions and local MCP server.
+EXTRA=()
+if [ -f .plugin-ignore ]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"; line="$(echo "$line" | xargs)"
+    [ -n "$line" ] && EXTRA+=(-x "$line")
+  done < .plugin-ignore
+  echo "Applying $(( ${#EXTRA[@]} / 2 )) extra exclusions from .plugin-ignore"
+fi
+
 zip -rq "$ZIP" . \
   -x '.git/*' '.github/*' 'node_modules/*' '*.zip' '*.plugin' \
-     '.DS_Store' '*/.DS_Store' '.env*' '.vercel/*' '.tooling/*'
+     '.DS_Store' '*/.DS_Store' '.env*' '.vercel/*' '.tooling/*' \
+     '.plugin-ignore' ${EXTRA[@]+"${EXTRA[@]}"}
 
 SIZE_MB=$(( $(wc -c < "$ZIP") / 1048576 ))
 echo "Built $ZIP (${SIZE_MB} MB)"
