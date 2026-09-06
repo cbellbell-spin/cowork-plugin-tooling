@@ -1,14 +1,15 @@
 #!/bin/bash
-# scripts/sync-shared-refs.sh
+# sync-shared-refs.sh
 #
-# Inline shared reference docs from the canonical source (shared/) into each
-# plugin's references/ directory. Cowork zips don't preserve symlinks, so this
-# must run before zip-and-publish to make the shared files appear as regular
-# files inside the zip.
+# Inline shared reference docs into each plugin's references/ directory. Cowork
+# zips don't preserve symlinks, so this must run before zip-and-publish to make
+# shared files appear as regular files inside the zip.
 #
-# Idempotent. Safe to run repeatedly. After this script runs, the plugin's
-# references/ files are regular files. If you want symlinks back for dev,
-# re-run the symlink setup (see README in scripts/).
+# Files are mapped per-plugin, not broadcast to all of them: a training coach has
+# no use for a PM operating manual, and shipping it wastes 30 KB of the upload
+# budget and confuses the model about scope.
+#
+# Idempotent. Safe to run repeatedly.
 
 set -euo pipefail
 
@@ -21,49 +22,57 @@ if [ ! -d "$SHARED_DIR" ]; then
   exit 1
 fi
 
-# The shared files (relative to SHARED_DIR).
-SHARED_FILES=(
-  "pm-operating-manual.md"
-  "working-with-me.md"
+# WORKSPACE.md is canonical in Drive, not in shared/. Refresh the shared/ copy
+# from the mirror first so plugins never ship a stale folder-ID registry.
+WORKSPACE_SRC="$HOME/My Drive/claude-workspace/WORKSPACE.md"
+if [ -f "$WORKSPACE_SRC" ]; then
+  cp "$WORKSPACE_SRC" "$SHARED_DIR/WORKSPACE.md"
+  echo "refreshed shared/WORKSPACE.md from Drive mirror"
+else
+  echo "! Drive mirror unavailable — shared/WORKSPACE.md may be stale" >&2
+fi
+
+# plugin:file[,file...] — which shared docs each plugin actually needs.
+# WORKSPACE.md goes to every plugin that reads or writes workspace data.
+# The PM docs go only to the PM coaching plugins.
+MAPPINGS=(
+  "coach-cadence:WORKSPACE.md"
+  "kate-career-coach:WORKSPACE.md"
+  "sdlc-system:WORKSPACE.md"
+  "product-dev-coach:WORKSPACE.md"
+  "product-ic-coach:WORKSPACE.md,pm-operating-manual.md,working-with-me.md"
+  "product-leadership-coach:pm-operating-manual.md,working-with-me.md"
 )
 
-# Plugins that share the canonical reference docs. Add entries as new plugins
-# adopt the shared references. The product-leadership-coach entry is included
-# as a no-op until its local source appears; the script will skip missing dirs.
-PLUGINS=(
-  "product-ic-coach"
-  "product-leadership-coach"
-)
+for mapping in "${MAPPINGS[@]}"; do
+  plugin="${mapping%%:*}"
+  files="${mapping#*:}"
 
-for plugin in "${PLUGINS[@]}"; do
   plugin_refs="$PROJECTS_ROOT/$plugin/references"
-  # Some plugins nest references under a skill (e.g. skills/<name>/references/).
-  # If the top-level references/ doesn't exist, try the umbrella-skill path.
+  # Some plugins nest references under a skill (skills/<name>/references/).
   if [ ! -d "$plugin_refs" ]; then
-    for nested in "$PROJECTS_ROOT/$plugin/skills/$plugin/references" "$PROJECTS_ROOT/$plugin/skills/$plugin-skill/references"; do
-      if [ -d "$nested" ]; then
-        plugin_refs="$nested"
-        break
-      fi
+    for nested in "$PROJECTS_ROOT/$plugin/skills/$plugin/references" \
+                  "$PROJECTS_ROOT/$plugin/skills/$plugin-skill/references"; do
+      if [ -d "$nested" ]; then plugin_refs="$nested"; break; fi
     done
   fi
 
   if [ ! -d "$plugin_refs" ]; then
-    echo "Skipping $plugin (no references/ found)"
+    echo "skipping $plugin (no references/ found)"
     continue
   fi
 
-  for file in "${SHARED_FILES[@]}"; do
+  IFS=',' read -ra file_list <<< "$files"
+  for file in "${file_list[@]}"; do
     src="$SHARED_DIR/$file"
-    dst="$plugin_refs/$file"
     if [ ! -f "$src" ]; then
-      echo "  ! $file not in shared/, skipping"
+      echo "  ! $file not in shared/, skipping" >&2
       continue
     fi
-    # Remove any symlink first so we replace it with a regular file, not write
-    # through the symlink into the canonical source.
-    rm -f "$dst"
-    cp "$src" "$dst"
+    # Remove any symlink first so we replace it with a regular file rather than
+    # writing through the symlink into the canonical source.
+    rm -f "$plugin_refs/$file"
+    cp "$src" "$plugin_refs/$file"
     echo "  + $plugin: $file"
   done
 done
