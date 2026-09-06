@@ -8,25 +8,45 @@ Copy this file into each plugin's `references/` at build time via
 
 ## Why
 
-Skills previously addressed files by POSIX path (`~/Cowork/Projects/...`,
-`~/Documents/pm-coach/...`). Web and mobile have no filesystem, so those
-instructions fail there even though the bytes are reachable via the Drive
-connector. Two plugins were writing to paths that never existed at all.
+Skills used to hardcode POSIX paths (`~/Cowork/Projects/...`,
+`~/Documents/pm-coach/...`) that resolve on exactly one Mac. Two of them pointed
+at directories that never existed anywhere.
+
+A hardcoded path is wrong even where a filesystem exists, because it competes
+with the folder the session actually connected. That conflict is not theoretical:
+on 2026-09-05 a mobile session and the local copy diverged, and seven coaching
+decisions were pruned from one copy while today's two entries existed only in the
+other. Deferring to the session folder, and keeping that folder inside the Drive
+mirror, is what prevents a repeat.
 
 ## Resolution procedure
 
-Before reading or writing plugin data:
+**The folder the session gives you always wins.** A Cowork session names its
+connected folder; that overrides anything written here. Only fall through when
+there is no session folder.
 
-1. **If filesystem tools are available** (Read / Write / Glob / Edit), use:
-   `~/My Drive/claude-workspace/<folder>/`
-   That is Drive for Desktop's mirror root — real local files, not placeholders.
-   `~/Google Drive/My Drive/claude-workspace/` resolves to the same content via
-   the CloudStorage symlink; either works, prefer the first.
-2. **Otherwise** — Cowork web or mobile — use the Google Drive connector.
-   Scope with `search_files` using the folder id below, then
-   `read_file_content` / `update_file` by file id.
-3. **If neither is available**, say so and stop. Never invent a path, never
-   write to a guessed location, never fall back to a local temp directory.
+1. **Session-assigned folder** — use it. Do not second-guess it against this file.
+2. **No session folder, filesystem available** — `~/My Drive/claude-workspace/<folder>/`
+   (Drive for Desktop's mirror root; real local files, not placeholders).
+3. **No filesystem** — Google Drive connector: `search_files` scoped by the folder
+   id below, then `read_file_content` / `update_file` by file id.
+4. **None of these resolve** — say so and stop. Never invent a path, never write to
+   a guessed location, never create a second copy somewhere reachable.
+
+### Why the order matters
+
+A Cowork session on web or mobile reaches local files only while the desktop app
+is open on that Mac *and* the session was started on desktop. If the Mac sleeps,
+the session keeps running but local access disappears — mid-session.
+
+That is why the connected folder should itself live inside the Drive mirror. Then
+route 1 and route 3 address the same bytes, and losing the bridge degrades to the
+connector instead of silently forking the data into two locations. A connected
+folder outside the mirror is the failure mode: it works until the Mac sleeps, then
+writes land somewhere the other surfaces never see.
+
+Applies to plugins that must work away from the desktop — coach-cadence first,
+kate-career-coach second. Desktop-only workflows can rely on route 1 alone.
 
 ## Folder registry
 
